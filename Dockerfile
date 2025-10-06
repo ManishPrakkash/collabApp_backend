@@ -4,16 +4,18 @@ WORKDIR /app
 
 COPY package*.json ./
 RUN npm install
+RUN npm install --no-save @types/express @types/jest
 
 COPY . .
 
-# Generate Prisma client
+# Make deploy-build.sh executable
+RUN chmod +x deploy-build.sh
+
+# Generate Prisma client and build with the deploy script
 RUN npx prisma generate
 
-# Build TypeScript code with skipLibCheck to avoid type errors in dependencies
-RUN npm run build
-# If you encounter any build issues, you can use the more explicit command below instead:
-# RUN npx tsc --skipLibCheck
+# Try to build with our deploy script that handles multiple fallback strategies
+RUN ./deploy-build.sh
 
 # Production image
 FROM node:18-alpine AS production

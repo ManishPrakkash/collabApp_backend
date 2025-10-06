@@ -5,7 +5,7 @@ services:
     env: node
     region: oregon # Choose the region closest to your users
     plan: free # Use the appropriate plan for your needs
-    buildCommand: chmod +x deploy-build.sh && ./deploy-build.sh
+    buildCommand: npm install --no-save @types/express @types/jest && chmod +x deploy-build.sh && ./deploy-build.sh
     startCommand: npm run start
     healthCheckPath: /
     envVars:

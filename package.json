@@ -8,6 +8,7 @@
     "test:coverage": "jest --coverage",
     "dev": "nodemon src/index.ts",
     "build": "tsc -p tsconfig.prod.json",
+    "build:emergency": "chmod +x deploy-build.sh && ./deploy-build.sh",
     "start": "node dist/index.js",
     "postinstall": "prisma generate"
   },

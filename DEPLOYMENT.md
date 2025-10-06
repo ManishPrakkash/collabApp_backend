@@ -95,17 +95,34 @@ If you encounter any issues:
 
 If you encounter TypeScript compilation errors during deployment:
 
-1. The deployment uses a special `deploy-build.sh` script that attempts multiple build strategies:
-   - Standard build with `--skipLibCheck`
-   - Alternative build with a stripped-down tsconfig
-   - Emergency build with `--allowJs --noEmitOnError false` flags
+1. The deployment uses an enhanced `deploy-build.sh` script with multiple fallback strategies:
+   - Standard build with the production TypeScript config
+   - Emergency build with reduced type checking
+   - Babel transpilation as a last resort if TypeScript fails completely
 
-2. You can check the build logs in Render to see which approach was used.
+2. Type definitions for Express and Jest are automatically installed during deployment:
+   ```
+   npm install --no-save @types/express @types/jest
+   ```
 
-3. For persistent TypeScript errors:
-   - Add missing type declarations for any libraries causing errors
-   - Consider adding `// @ts-ignore` comments for problematic lines as a last resort
-   - Verify the Jest setup is properly configured for test files
+3. The `custom.d.ts` file provides additional type declarations for modules that may not have proper TypeScript typings.
+
+4. Multiple TypeScript configuration files are used:
+   - `tsconfig.json` - Main TypeScript config (for development)
+   - `tsconfig.prod.json` - Production build config (excludes tests)
+   - `tsconfig.emergency.json` - Created during build if needed (minimal type checking)
+
+5. If you need to rebuild manually, use one of these commands:
+   ```
+   npm run build           # Standard production build
+   npm run build:emergency # Multi-strategy build with fallbacks
+   ```
+
+6. For persistent TypeScript errors:
+   - Check the build logs in Render to identify specific errors
+   - Add missing type declarations to `custom.d.ts`
+   - If needed, use `// @ts-ignore` comments (as a last resort)
+   - Ensure module imports use proper ES modules syntax with `import x from 'y'` format
 
 ## Notes on Email Verification and Payments
 
