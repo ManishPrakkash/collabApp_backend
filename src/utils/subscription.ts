@@ -3,10 +3,18 @@ import { PrismaClient, SubscriptionPlan } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// Initialize Stripe
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-08-27.basil',
-});
+// Check if Stripe is enabled
+const STRIPE_ENABLED = !!process.env.STRIPE_SECRET_KEY;
+
+// Initialize Stripe conditionally
+const stripe = STRIPE_ENABLED 
+  ? new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: '2025-08-27.basil' })
+  : null;
+
+// Log whether Stripe is disabled
+if (!STRIPE_ENABLED) {
+  console.log('Stripe payments are disabled (STRIPE_SECRET_KEY not provided)');
+}
 
 // Subscription plan limits
 export const SUBSCRIPTION_LIMITS = {
@@ -173,6 +181,22 @@ export async function canUploadFile(userId: string, fileSizeBytes: number): Prom
  * Create or update Stripe customer
  */
 export async function createOrUpdateStripeCustomer(userId: string, email: string, name?: string) {
+  // If Stripe is disabled, use a mock customer ID
+  if (!STRIPE_ENABLED) {
+    // Create a dummy subscription record if needed
+    await prisma.subscription.upsert({
+      where: { userId },
+      create: {
+        userId,
+        stripeCustomerId: 'mock_customer_id',
+        plan: SubscriptionPlan.STARTER,
+        status: 'ACTIVE', // Set to active since we're bypassing payment
+      },
+      update: {}, // No updates needed for existing records
+    });
+    return 'mock_customer_id';
+  }
+  
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { subscription: true },
@@ -186,7 +210,7 @@ export async function createOrUpdateStripeCustomer(userId: string, email: string
 
   if (!customerId) {
     // Create new Stripe customer
-    const customer = await stripe.customers.create({
+    const customer = await stripe!.customers.create({
       email,
       name,
       metadata: {
@@ -217,6 +241,40 @@ export async function createOrUpdateStripeCustomer(userId: string, email: string
  * Create Stripe checkout session
  */
 export async function createCheckoutSession(userId: string, priceId: string, successUrl: string, cancelUrl: string) {
+  // If Stripe is disabled, auto-upgrade the user to the requested plan
+  if (!STRIPE_ENABLED) {
+    console.log('Stripe is disabled - auto-upgrading user to requested plan');
+    
+    // Determine which plan based on price ID
+    let plan: SubscriptionPlan = SubscriptionPlan.STARTER; // Default
+    
+    if (priceId === SUBSCRIPTION_LIMITS.PRO.stripePriceId) {
+      plan = SubscriptionPlan.PRO as SubscriptionPlan;
+    } else if (priceId === SUBSCRIPTION_LIMITS.ENTERPRISE.stripePriceId) {
+      plan = SubscriptionPlan.ENTERPRISE as SubscriptionPlan;
+    }
+    
+    // Update user subscription
+    await prisma.subscription.upsert({
+      where: { userId },
+      create: {
+        userId,
+        stripeCustomerId: 'mock_customer_id',
+        plan: plan,
+        status: 'ACTIVE',
+      },
+      update: {
+        plan: plan,
+        status: 'ACTIVE',
+      },
+    });
+    
+    return { 
+      id: 'mock_session_id', 
+      url: successUrl // Auto-redirect to success URL
+    };
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { subscription: true },
@@ -232,13 +290,13 @@ export async function createCheckoutSession(userId: string, priceId: string, suc
   if (user.subscription?.stripeSubscriptionId && user.subscription.status === 'ACTIVE') {
     console.log('Canceling existing subscription before upgrade:', user.subscription.stripeSubscriptionId);
     try {
-      await stripe.subscriptions.update(user.subscription.stripeSubscriptionId, {
+      await stripe!.subscriptions.update(user.subscription.stripeSubscriptionId, {
         cancel_at_period_end: false,
         proration_behavior: 'create_prorations',
       });
       
       // Cancel immediately for upgrades
-      await stripe.subscriptions.cancel(user.subscription.stripeSubscriptionId);
+      await stripe!.subscriptions.cancel(user.subscription.stripeSubscriptionId);
       
       console.log('Successfully canceled existing subscription');
     } catch (error) {
@@ -247,7 +305,7 @@ export async function createCheckoutSession(userId: string, priceId: string, suc
     }
   }
 
-  const session = await stripe.checkout.sessions.create({
+  const session = await stripe!.checkout.sessions.create({
     customer: customerId,
     payment_method_types: ['card'],
     line_items: [
@@ -271,6 +329,14 @@ export async function createCheckoutSession(userId: string, priceId: string, suc
  * Create Stripe billing portal session
  */
 export async function createBillingPortalSession(userId: string, returnUrl: string) {
+  // If Stripe is disabled, just return the return URL
+  if (!STRIPE_ENABLED) {
+    console.log('Stripe is disabled - redirecting to return URL');
+    return { 
+      url: returnUrl 
+    };
+  }
+
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { subscription: true },
@@ -280,7 +346,7 @@ export async function createBillingPortalSession(userId: string, returnUrl: stri
     throw new Error('No active subscription found');
   }
 
-  const session = await stripe.billingPortal.sessions.create({
+  const session = await stripe!.billingPortal.sessions.create({
     customer: user.subscription.stripeCustomerId,
     return_url: returnUrl,
   });
@@ -292,6 +358,12 @@ export async function createBillingPortalSession(userId: string, returnUrl: stri
  * Handle successful subscription webhook
  */
 export async function handleSubscriptionCreated(subscription: Stripe.Subscription) {
+  // If Stripe is disabled, this function should never be called
+  if (!STRIPE_ENABLED) {
+    console.error('Stripe is disabled but webhook handler was called');
+    return;
+  }
+
   const customerId = subscription.customer as string;
   const priceId = subscription.items.data[0]?.price.id;
 
@@ -310,7 +382,7 @@ export async function handleSubscriptionCreated(subscription: Stripe.Subscriptio
 
   // If not found, try to find by Stripe customer metadata
   if (!userSubscription) {
-    const customer = await stripe.customers.retrieve(customerId);
+    const customer = await stripe!.customers.retrieve(customerId);
     if (customer && !customer.deleted && customer.metadata?.userId) {
       userSubscription = await prisma.subscription.findUnique({
         where: { userId: customer.metadata.userId },

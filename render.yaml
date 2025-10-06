@@ -15,6 +15,9 @@ services:
         value: 10000
       - key: DISABLE_EMAIL
         value: true
+      # Stripe is disabled for this deployment
+      - key: STRIPE_SECRET_KEY
+        value: ""
       - key: JWT_SECRET
         generateValue: true # This will generate a secure random value for you
       - key: DATABASE_URL

@@ -41,6 +41,7 @@ This guide provides instructions for deploying the backend to Render and connect
    - `JWT_SECRET`: Generate a secure random string
    - `FRONTEND_URL`: URL of your Vercel frontend app
    - `DISABLE_EMAIL`: `true` (email verification and sending has been disabled)
+   - `STRIPE_SECRET_KEY`: Empty string (payment processing has been disabled)
 
 6. Click "Create Web Service" to start the deployment process.
 
