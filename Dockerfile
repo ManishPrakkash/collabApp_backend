@@ -10,8 +10,10 @@ COPY . .
 # Generate Prisma client
 RUN npx prisma generate
 
-# Build TypeScript code
+# Build TypeScript code with skipLibCheck to avoid type errors in dependencies
 RUN npm run build
+# If you encounter any build issues, you can use the more explicit command below instead:
+# RUN npx tsc --skipLibCheck
 
 # Production image
 FROM node:18-alpine AS production

@@ -91,6 +91,22 @@ If you encounter any issues:
 3. Check that CORS is properly configured to allow communication between frontend and backend.
 4. Ensure the database connection string is correct and accessible from the Render service.
 
+### TypeScript Build Issues
+
+If you encounter TypeScript compilation errors during deployment:
+
+1. The deployment uses a special `deploy-build.sh` script that attempts multiple build strategies:
+   - Standard build with `--skipLibCheck`
+   - Alternative build with a stripped-down tsconfig
+   - Emergency build with `--allowJs --noEmitOnError false` flags
+
+2. You can check the build logs in Render to see which approach was used.
+
+3. For persistent TypeScript errors:
+   - Add missing type declarations for any libraries causing errors
+   - Consider adding `// @ts-ignore` comments for problematic lines as a last resort
+   - Verify the Jest setup is properly configured for test files
+
 ## Notes on Email Verification and Payments
 
 This deployment has been configured to skip email verification and Stripe payment integration as requested. If you need to add these features in the future:
