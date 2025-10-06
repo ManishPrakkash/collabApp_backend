@@ -59,40 +59,18 @@ authRouter.post(
           },
         });
 
-        // verification code and expiry
-        const verificationCode = crypto.randomBytes(32).toString("hex");
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-        // Check if email verification should be skipped (development mode)
-        if (process.env.SKIP_EMAIL_VERIFICATION === "true") {
-          // Auto-verify email for development
-          await prisma.user.update({
-            where: { id: newUser.id },
-            data: { emailVerified: new Date() }
-          });
-          
-          console.log("Development mode: Email verification skipped for", email);
-        } else {
-          // Normal email verification flow
-          await prisma.verificationToken.create({
-            data: {
-              id: crypto.randomUUID(),
-              email,
-              code: verificationCode,
-              expiresAt,
-            },
-          });
-
-          // Send verification email
-          await sendEmailVerificationEmail(email, verificationCode);
-        }
-
+        // By default, auto-verify all new accounts (email verification disabled)
+        await prisma.user.update({
+          where: { id: newUser.id },
+          data: { emailVerified: new Date() }
+        });
+        
+        console.log("Email verification skipped for", email);
+        
         const { password: _, ...userWithoutPassword } = newUser;
         
-        // Customize message based on verification mode
-        const message = process.env.SKIP_EMAIL_VERIFICATION === "true"
-          ? "Sign Up successful. Your account is ready to use."
-          : "Sign Up successful. Please check your email to activate your account.";
+        // Account is always ready to use
+        const message = "Sign Up successful. Your account is ready to use.";
           
         res.status(201).json({
           ...userWithoutPassword,
@@ -130,18 +108,14 @@ authRouter.post(
           return res.status(401).json({ message: "Invalid credentials" });
         }
 
-        // Check if email is verified - for email/password users
-        const hasOAuthAccount = await prisma.account.findFirst({
-          where: { userId: user.id },
-        });
-
-        if (!hasOAuthAccount && !user.emailVerified) {
-          return res.status(403).json({
-            message:
-              "Email not verified. Please check your inbox for verification link.",
-            emailVerified: false,
-            email: user.email,
+        // Always allow login regardless of email verification status
+        // If needed, auto-verify the email during login
+        if (!user.emailVerified) {
+          await prisma.user.update({
+            where: { id: user.id },
+            data: { emailVerified: new Date() }
           });
+          console.log("Auto-verified email during login for:", email);
         }
 
         const { password: _, ...userWithoutPassword } = user;
@@ -416,45 +390,16 @@ authRouter.post("/verify-email", function (req: Request, res: Response) {
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      if (user.emailVerified) {
-        return res.status(400).json({ message: "Email already verified" });
+      
+      // All emails are considered verified, but update if not
+      if (!user.emailVerified) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { emailVerified: new Date() },
+        });
       }
-      const foundToken = await prisma.verificationToken.findFirst({
-        where: {
-          code,
-          email,
-        },
-      });
-
-      if (!foundToken) {
-        return res.status(400).json({ message: "Invalid verification code" });
-      }
-
-      // Token validation
-      if (isTokenExpired(foundToken.expiresAt)) {
-        return res
-          .status(400)
-          .json({ message: "Verification code has expired" });
-      }
-
-      if (!user) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // update user emailVerified field
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { emailVerified: new Date() },
-      });
-
-      // verification token deletion
-      await prisma.verificationToken.deleteMany({
-        where: {
-          id: foundToken.id,
-          code: foundToken.code,
-        },
-      });
-
+      
+      // Always return success
       res.status(200).json({ message: "Email verified successfully" });
     } catch (err) {
       debugError("Email verification error:", err);
@@ -475,38 +420,21 @@ authRouter.post("/resend-verification", function (req: Request, res: Response) {
         return res.status(404).json({ message: "User not found" });
       }
 
-      // Check if email is already verified
-      if (user.emailVerified) {
-        return res.status(400).json({ message: "Email already verified" });
+      // Auto-verify the email if not already verified
+      if (!user.emailVerified) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { emailVerified: new Date() },
+        });
       }
 
-      // Delete existing verification tokens for this email
-      await prisma.verificationToken.deleteMany({
-        where: { email },
-      });
-
-      // verification code and expiry
-      const verificationCode = crypto.randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-      await prisma.verificationToken.create({
-        data: {
-          id: crypto.randomUUID(),
-          email,
-          code: verificationCode,
-          expiresAt,
-        },
-      });
-
-      // Send verification email
-      await sendEmailVerificationEmail(email, verificationCode);
-
+      // Always return success
       res.status(200).json({
-        message: "Verification email sent successfully",
+        message: "Email verification successful",
       });
     } catch (err) {
-      debugError("Error resending verification email:", err);
-      res.status(500).json({ message: "Failed to resend verification email" });
+      debugError("Error during auto-verification:", err);
+      res.status(500).json({ message: "Failed to process email verification" });
     }
   })();
 });

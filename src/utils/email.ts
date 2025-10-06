@@ -1,15 +1,19 @@
 import { Resend } from "resend";
 
 const resendAPIKey = process.env.RESEND_API_KEY;
-if (!resendAPIKey) {
-  throw new Error("RESEND_API_KEY environment variable is not set");
-}
+const DISABLE_EMAIL = !resendAPIKey || process.env.DISABLE_EMAIL === "true";
 
-const resend = new Resend(resendAPIKey);
+// Create a real or mock Resend client
+const resend = DISABLE_EMAIL ? null : new Resend(resendAPIKey);
 
 const FROM_EMAIL = "Nothing <noreply@pritam.studio>";
 
 const BASE_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+
+// Logger to track email operations when emails are disabled
+const logEmailOperation = (type: string, recipient: string) => {
+  console.log(`[EMAIL DISABLED] Would send ${type} email to: ${recipient}`);
+};
 
 export async function sendPasswordResetEmail(
   email: string,
@@ -18,8 +22,14 @@ export async function sendPasswordResetEmail(
   const resetUrl = `${BASE_URL}/auth/reset-password?token=${resetToken}`;
   const subject = "Password Reset Request";
 
+  if (DISABLE_EMAIL) {
+    logEmailOperation("password reset", email);
+    console.log(`Reset URL would be: ${resetUrl}`);
+    return;
+  }
+
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await resend!.emails.send({
       from: FROM_EMAIL,
       to: [email],
       subject,
@@ -55,8 +65,14 @@ export async function sendDeleteVerificationEmail(
 ): Promise<void> {
   const subject = "Account Deletion Verification";
 
+  if (DISABLE_EMAIL) {
+    logEmailOperation("account deletion verification", email);
+    console.log(`Deletion verification code would be: ${code}`);
+    return;
+  }
+
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await resend!.emails.send({
       from: FROM_EMAIL,
       to: [email],
       subject,
@@ -92,8 +108,14 @@ export async function sendEmailVerificationEmail(
   const verificationUrl = `${BASE_URL}/auth/verify-email?code=${verificationCode}&email=${encodeURIComponent(email)}`;
   const subject = "Email Verification";
 
+  if (DISABLE_EMAIL) {
+    logEmailOperation("email verification", email);
+    console.log(`Verification URL would be: ${verificationUrl}`);
+    return;
+  }
+
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await resend!.emails.send({
       from: FROM_EMAIL,
       to: [email],
       subject,
@@ -132,8 +154,15 @@ export async function sendProjectInvitationEmail(
   const invitationUrl = `${BASE_URL}/invitations/accept?token=${token}`;
   const subject = `Invitation to join the "${projectName}" project`;
 
+  if (DISABLE_EMAIL) {
+    logEmailOperation("project invitation", email);
+    console.log(`Invitation URL would be: ${invitationUrl}`);
+    console.log(`Project: "${projectName}", Inviter: "${inviterName}"`);
+    return;
+  }
+
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await resend!.emails.send({
       from: FROM_EMAIL,
       to: [email],
       subject,
@@ -167,8 +196,14 @@ export async function sendSubsEmail(email: string): Promise<void> {
   const nothingUrl = `${BASE_URL}`;
   const subject = `Subscription to Nothing`;
 
+  if (DISABLE_EMAIL) {
+    logEmailOperation("subscription confirmation", email);
+    console.log(`App URL would be: ${nothingUrl}`);
+    return;
+  }
+
   try {
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await resend!.emails.send({
       from: FROM_EMAIL,
       to: [email],
       subject,
@@ -185,15 +220,15 @@ export async function sendSubsEmail(email: string): Promise<void> {
     });
 
     if (error) {
-      console.error("Resend API error (project invitation):", error);
+      console.error("Resend API error (subscription email):", error);
       throw new Error(
         `Email sending failed: ${error.message || JSON.stringify(error)}`
       );
     }
   } catch (error) {
-    console.error("Error sending project invitation email:", error);
+    console.error("Error sending subscription email:", error);
     throw new Error(
-      `Failed to send invitation email: ${error instanceof Error ? error.message : "Unknown error"}`
+      `Failed to send subscription email: ${error instanceof Error ? error.message : "Unknown error"}`
     );
   }
 }
