@@ -12,7 +12,7 @@ import { SocketProvider } from "@/components/context/SocketContext";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Nudge Collab",
+  title: "Nothing",
   description: "A platform for project collaboration",
 };
 

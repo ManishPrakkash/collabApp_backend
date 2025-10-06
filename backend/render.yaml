@@ -1,0 +1,24 @@
+services:
+  # Backend API service
+  - type: web
+    name: project-management-api
+    env: node
+    region: oregon # Choose the region closest to your users
+    plan: free # Use the appropriate plan for your needs
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: SKIP_EMAIL_VERIFICATION
+        value: true
+      - key: JWT_SECRET
+        generateValue: true # This will generate a secure random value for you
+      - key: DATABASE_URL
+        sync: false # Set this manually in the Render dashboard for security
+      - key: FRONTEND_URL
+        sync: false # Update with your Vercel frontend URL
+    autoDeploy: true # Set to false if you want manual deploys
